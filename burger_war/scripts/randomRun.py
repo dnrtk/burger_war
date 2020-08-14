@@ -4,6 +4,7 @@ import sys
 import random
 import json
 import math
+import threading
 
 import cv2
 import numpy as np
@@ -120,12 +121,12 @@ class RandomBot():
         self.name = bot_name
         # initialize map channel
         self.mapList = dict()
-        self.mapList['FieldMap'] =  np.zeros(FIELD_SIZE)
-        self.mapList['MyQrMap'] =  np.zeros(FIELD_SIZE)
-        self.mapList['EnemyQrMap'] =  np.zeros(FIELD_SIZE)
-        self.mapList['NoneQrMap'] =  np.zeros(FIELD_SIZE)
-        self.mapList['EnemyMap'] =  np.zeros(FIELD_SIZE)
-        self.mapList['MyPositionMap'] =  np.zeros(FIELD_SIZE)
+        self.mapList['FieldMap'] = np.zeros(FIELD_SIZE)
+        self.mapList['MyQrMap'] = np.zeros(FIELD_SIZE)
+        self.mapList['EnemyQrMap'] = np.zeros(FIELD_SIZE)
+        self.mapList['NoneQrMap'] = np.zeros(FIELD_SIZE)
+        self.mapList['EnemyMap'] = np.zeros(FIELD_SIZE)
+        self.mapList['MyPositionMap'] = np.zeros(FIELD_SIZE)
 
         self.map_data = np.zeros(FIELD_SIZE)
         self.myPositionMap = np.zeros(FIELD_SIZE)
@@ -133,8 +134,10 @@ class RandomBot():
         self.vel_pub = rospy.Publisher('cmd_vel', Twist,queue_size=1)
         self.map_sub = rospy.Subscriber('map', OccupancyGrid, self.mapCallback)
         # self.gCostMap_sub = rospy.Subscriber('move_base/global_costmap/costmap', OccupancyGrid, self.globalCostmapCallback)
+        self.warState_lock = threading.RLock()
         self.warState_sub = rospy.Subscriber('war_state', String, self.warStateCallback)
         self.odom = Odometry()
+        self.odom_lock = threading.RLock()
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.odometryCallback)
     
     def mapCallback(self, data):
@@ -150,7 +153,8 @@ class RandomBot():
 
     def warStateCallback(self, data):
         # print('WarStateCB')
-        self.warState = data.data
+        with self.warState_lock:
+            self.warState = data.data
         
     def createQrMap(self):
         self.mapList['MyQrMap'] =  np.zeros(FIELD_SIZE)
@@ -158,7 +162,8 @@ class RandomBot():
         self.mapList['NoneQrMap'] =  np.zeros(FIELD_SIZE)
 
         try:
-            warStateDict = json.loads(self.warState)
+            with self.warState_lock:
+                warStateDict = json.loads(self.warState)
         except:
             # パース失敗時は空MAPにする
             return
@@ -178,13 +183,15 @@ class RandomBot():
 
     def odometryCallback(self, data):
         # print('OdometryCB')
-        self.odom = data
+        with self.odom_lock:
+            self.odom = data
 
     def createMyPositionMap(self):
-        # 座標を -2.0〜2.0 → 0.0〜4.0 に変換して、更にフィールドの座標に変換
-        tempX = int((self.odom.pose.pose.position.x + 2.0) / 4.0 * FIELD_SIZE[1])
-        tempY = int(FIELD_SIZE[0] - (self.odom.pose.pose.position.y + 2.0) / 4.0 * FIELD_SIZE[0])
-        tempVector3 = quaternion_to_euler(self.odom.pose.pose.orientation)
+        with self.odom_lock:
+            # 座標を -2.0〜2.0 → 0.0〜4.0 に変換して、更にフィールドの座標に変換
+            tempX = int((self.odom.pose.pose.position.x + 2.0) / 4.0 * FIELD_SIZE[1])
+            tempY = int(FIELD_SIZE[0] - (self.odom.pose.pose.position.y + 2.0) / 4.0 * FIELD_SIZE[0])
+            tempVector3 = quaternion_to_euler(self.odom.pose.pose.orientation)
         tempRotate = tempVector3.z / math.pi * 180
         # print('x:{} y:{} r:'.format(tempX, tempY, tempRotate))
         
