@@ -70,6 +70,24 @@ qrCoordinates = {
     'FriedShrimp_S' : (45, 40),
 }
 
+backupRoutes = [
+    (-0.9, 0.2, 25),    # Pudding_S
+    (-0.8, -0.4, -20),  # OctopusWiener_S
+    (-0.6, 0.0, 0),     # FriedShrimp_S
+
+    (0.0, 0.5, -180),   # Pudding_N
+    (0.0, 0.5, -90),    # FriedShrimp_W
+    (0.0, 0.5, 0),      # Tomato_S
+
+    (0.9, 0.25, 115),   # Tomato_N
+    (0.55, 0.0, 180),   # FriedShrimp_N
+    (0.9, -0.25, -115), # Omelette_N
+
+    (0.0, -0.5, 0),     # Omelette_S
+    (0.0, -0.5, 90),    # FriedShrimp_E
+    (0.0, -0.5, 180),   # OctopusWiener_N
+]
+
 def euler_to_quaternion(euler):
     q = tf.transformations.quaternion_from_euler(euler.x, euler.y, euler.z)
     return Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
@@ -89,6 +107,7 @@ def goal_pose(targetX, targetY, targetR):
     goal_pose.target_pose.pose.position.y = targetY
     goal_pose.target_pose.pose.position.z = 0.0
 
+    targetR = targetR / 180.0 * math.pi
     tempQuaternion = euler_to_quaternion(Vector3(0.0, 0.0, targetR))
     goal_pose.target_pose.pose.orientation = tempQuaternion
     
@@ -119,9 +138,15 @@ class RandomBot():
     def __init__(self, bot_name="NoName"):
         # bot name 
         self.name = bot_name
+
+        # init status
+        # self.backupStatus = -1
+        self.backupStatus = 0      # TODO: 未学習なので常にバックアップ動作
+
         # initialize map channel
         self.mapList = dict()
         self.mapList['FieldMap'] = np.zeros(FIELD_SIZE)
+        self.mapList['LidarMap'] = np.zeros(FIELD_SIZE)
         self.mapList['MyQrMap'] = np.zeros(FIELD_SIZE)
         self.mapList['EnemyQrMap'] = np.zeros(FIELD_SIZE)
         self.mapList['NoneQrMap'] = np.zeros(FIELD_SIZE)
@@ -139,6 +164,9 @@ class RandomBot():
         self.odom = Odometry()
         self.odom_lock = threading.RLock()
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.odometryCallback)
+        # self.scan = LaserScan()
+        # self.scan_lock = threading.RLock()
+        # self.scan_sub = rospy.Subscriber('scan', LaserScan, self.scanCallback)
     
     def mapCallback(self, data):
         # print('MapCB')
@@ -189,48 +217,63 @@ class RandomBot():
     def createMyPositionMap(self):
         with self.odom_lock:
             # 座標を -2.0〜2.0 → 0.0〜4.0 に変換して、更にフィールドの座標に変換
-            tempX = int((self.odom.pose.pose.position.x + 2.0) / 4.0 * FIELD_SIZE[1])
-            tempY = int(FIELD_SIZE[0] - (self.odom.pose.pose.position.y + 2.0) / 4.0 * FIELD_SIZE[0])
+            self.myX = int((self.odom.pose.pose.position.x + 2.0) / 4.0 * FIELD_SIZE[1])
+            self.myY = int(FIELD_SIZE[0] - (self.odom.pose.pose.position.y + 2.0) / 4.0 * FIELD_SIZE[0])
             tempVector3 = quaternion_to_euler(self.odom.pose.pose.orientation)
-        tempRotate = tempVector3.z / math.pi * 180
-        # print('x:{} y:{} r:'.format(tempX, tempY, tempRotate))
+        self.myR = tempVector3.z / math.pi * 180
+        print('x:{} y:{} r:{}'.format(self.myX, self.myY, self.myR))
         
-        trans = cv2.getRotationMatrix2D((myRobotMapCenterX, myRobotMapCenterY), tempRotate , 1.0)
+        trans = cv2.getRotationMatrix2D((myRobotMapCenterX, myRobotMapCenterY), self.myR , 1.0)
         tempMyRobotMap = cv2.warpAffine(myRobotMap, trans, myRobotMap.shape)
 
         # 自ロボ位置と射程を描画
         self.mapList['MyPositionMap'] = np.zeros(FIELD_SIZE)
         # self.mapList['MyPositionMap'] += self.mapList['FieldMap']
-        offsetX = tempX - myRobotMapCenterX
-        offsetY = tempY - myRobotMapCenterY
+        offsetX = self.myX - myRobotMapCenterX
+        offsetY = self.myY - myRobotMapCenterY
         for indexY, valueY in enumerate(tempMyRobotMap):
             for indexX, valueX in enumerate(valueY):
                 if (indexY + offsetY) < FIELD_SIZE[0] and (indexX + offsetX) < FIELD_SIZE[1]:
                     self.mapList['MyPositionMap'][indexY + offsetY][indexX + offsetX] += valueX
 
-    # def calcTwist(self):
-    #     value = random.randint(1,1000)
-    #     # value = 1001
-    #     if value < 250:
-    #         x = 0.2
-    #         th = 0
-    #     elif value < 500:
-    #         x = -0.2
-    #         th = 0
-    #     elif value < 750:
-    #         x = 0
-    #         th = 1
-    #     elif value < 1000:
-    #         x = 0
-    #         th = -1
-    #     else:
-    #         x = 0
-    #         th = 0
-    #     twist = Twist()
-    #     twist.linear.x = x; twist.linear.y = 0; twist.linear.z = 0
-    #     twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th
-    #     return twist
+    def scanCallback(self, data):
+        print('ScanCB')
+        with self.scan_lock:
+            self.scan = data
+        # print(data)
+        # print('angle_min: {}, angle_max: {}, angle_increment: {}'.format(data.angle_min, data.angle_max, data.angle_increment))
+        print('{} {}'.format(min(data.intensities), max(data.intensities)))
+    
+    def createLidarMap(self):
+        # [注意] 自己位置と角度を更新後にコールすること
+        # (createMyPositionMap()コール後)
+        with self.scan_lock:
+            tempRanges = self.scan.ranges
+            tempIntensities = self.scan.intensities
 
+        self.mapList['LidarMap'] = np.zeros(FIELD_SIZE)
+        for tempRange, tempIntensity in zip(tempRanges, tempIntensities):
+            tempIntensity /= 10 ** 26
+            tempIntensity *= 1.5
+            if tempIntensity > 0.1:
+                tempRange -= math.radians(self.myR)
+                tempX = int(tempIntensity * math.cos(tempRange) * FIELD_SIZE[1]) + self.myX
+                tempY = int(tempIntensity * math.sin(tempRange) * FIELD_SIZE[0]) + self.myY
+                # print('tempIntensity:{} tempRange:{} tempX:{} tempY:{}'.format(tempIntensity, tempRange, tempX, tempY))
+                self.mapList['LidarMap'][tempY][tempX] = 1.0
+
+    def feedback_cb(self,feed):
+        # print('feedback_cb: {}'.format(feed))
+        pass
+
+    def done_cb(self,result, result2):
+        # print('done_cb: {}'.format(result))
+        if self.backupStatus >= 0:
+            self.backupStatus += 1
+            if self.backupStatus >= len(backupRoutes):
+                self.backupStatus = 0
+            print('BackupMode Status:{}'.format(self.backupStatus))
+    
     def strategy(self):
         r = rospy.Rate(1) # change speed 1fps
 
@@ -247,12 +290,13 @@ class RandomBot():
         fig = plt.figure()
         ax = dict()
         for axIndex, figName in enumerate(self.mapList):
-            ax[figName] = fig.add_subplot(2, 3, axIndex+1)
+            ax[figName] = fig.add_subplot(2, 4, axIndex+1)
             plt.title(figName)
 
         while not rospy.is_shutdown():
             # 各チャネル情報生成
             self.createMyPositionMap()
+            # self.createLidarMap()
             self.createQrMap()
 
             # 描画
@@ -262,15 +306,22 @@ class RandomBot():
 
             # 入力用に加工
             inputImage = np.array(list(self.mapList.values()))
-            inputImage = inputImage.reshape(1, 80, 80, 6)
+            inputImage = inputImage.reshape(1, 80, 80, 7)
             inputImage *= 100
             
             # 行動決定
-            tempPose = self.myModel.predict(inputImage)
+            if self.backupStatus < 0:
+                tempPose = self.myModel.predict(inputImage)
+            else:
+                # TODO: 未学習なので常にバックアップ動作
+                tempPose = backupRoutes[self.backupStatus]
+            
             tempGoal = goal_pose(tempPose[0], tempPose[1], tempPose[2])
             # tempGoal = goal_pose(1.4, 0.0, 0.0)
-            print('{} {} {}'.format(tempPose[0], tempPose[1], tempPose[2]))
-            self.client.send_goal(tempGoal)
+
+            print('Goal: {} {} {}'.format(tempPose[0], tempPose[1], tempPose[2]))
+            self.client.send_goal(tempGoal, done_cb=self.done_cb, feedback_cb=self.feedback_cb)
+            # self.client.send_goal(tempGoal)
 
             r.sleep()
 

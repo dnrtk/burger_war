@@ -38,7 +38,7 @@ class MyModel:
             print('Create New MyModel')
     
     def createModel(self):
-        input = Input(shape=(80, 80, 6))
+        input = Input(shape=(80, 80, 7))
         x = createInceptionv3Module(input, 32)
         x = createInceptionv3Module(x, 64)
         x = createInceptionv3Module(x, 128)
@@ -52,7 +52,7 @@ class MyModel:
         return model
 
     def createModelCNN(self):
-        input = Input(shape=(80, 80, 6))
+        input = Input(shape=(80, 80, 7))
         x = Conv2D(filters=16, kernel_size=3, activation='relu', padding='same')(input)
         x = Conv2D(filters=16, kernel_size=3, activation='relu', padding='same')(x)
         x = MaxPooling2D(pool_size=2)(x)
