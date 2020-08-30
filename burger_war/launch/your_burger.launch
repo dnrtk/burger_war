@@ -88,7 +88,9 @@
     </group>
 
     <!-- MyRobot -->
-    <node pkg="burger_war" type="randomRun.py" name="randomRun" output="screen"/>
+    <node pkg="burger_war" type="randomRun.py" name="randomRun" output="screen">
+      <param name="side" value="$(arg side)" />
+    </node>
 
     <!-- End of your space  -->
 </launch>
