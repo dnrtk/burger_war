@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# 参考
+# https://qiita.com/ohtaman/items/edcb3b0a2ff9d48a7def
+# https://qiita.com/inoory/items/e63ade6f21766c7c2393
+
 import json
 import math
 import threading
 import time
-import subprocess
 
 import cv2
 import numpy as np
@@ -76,12 +79,6 @@ def occupancyGrid_to_ndarray(occupancyGridData, visibleFlag=False):
 
     return tempMapData
 
-
-# 参考
-# https://qiita.com/ohtaman/items/edcb3b0a2ff9d48a7def
-# https://qiita.com/inoory/items/e63ade6f21766c7c2393
-
-
 class MyEnv(gym.Env):
     mapScaleMax = 100
     def __init__(self, side, renderFlag=False):
@@ -106,13 +103,6 @@ class MyEnv(gym.Env):
         # TOPIC受信準備
         self.setTopicSubscriber()
         # self._reset()
-        # 描画準備
-        if self.renderFlag:
-            self.fig = plt.figure()
-            self.ax = dict()
-            for axIndex, figName in enumerate(self.mapList):
-                self.ax[figName] = self.fig.add_subplot(2, 4, axIndex+1)
-                plt.title(figName)
 
     def initMapList(self):
         # initialize map channel
@@ -138,11 +128,6 @@ class MyEnv(gym.Env):
         self.stepCount += 1
 
         # # 入力用に加工
-        # inputImage = np.array(list(self.mapList.values()))
-        # inputImage = inputImage.reshape(1, 80, 80, 7)
-        # # inputImage *= 100
-        # # 行動決定
-        # tempPose = self.myModel.predict(inputImage)
         tempPose = action[0]
         tempGoal = goal_pose(tempPose[0], tempPose[1], tempPose[2])
 
@@ -152,13 +137,12 @@ class MyEnv(gym.Env):
         self.r.sleep()
         # wait_for_result(self, timeout = rospy.Duration()) でNavigationのgoal到達までを待てる
 
-        # state2, reward, end_flag, info = env.step(action)
         state2 = self.observe()
         nowReward = self.subscribers['war_state'].getReward()
         reward = nowReward - self.preReward
         self.preReward = nowReward
         end_flag = False if self.stepCount < 180 else True  # 180sec経過で終了
-        end_flag = False    # TODO: Resetに失敗するので、無限に続行
+        end_flag = False    # TODO: Resetできないので、無限に続行
         info = {}
         return state2, reward, end_flag, info
 
@@ -212,12 +196,6 @@ class MyEnv(gym.Env):
         else:
             self.backupStatus = -1
             print('Mode Change : NORMAL')
-
-    # def showMap(self):
-    #     if self.renderFlag:
-    #         for figName in self.mapList:
-    #             self.ax[figName].imshow(self.mapList[figName],interpolation='nearest',vmin=0,vmax=1,cmap='hot')
-    #         plt.pause(0.001)
 
     def getMapList(self):
         return self.mapList

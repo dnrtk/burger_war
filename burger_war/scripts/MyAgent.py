@@ -5,8 +5,6 @@
 # https://qiita.com/ReoNagai/items/936a2981d6a3e2b000d4
 
 import os
-import gym
-import random
 import math
 from operator import mul
 
@@ -14,8 +12,7 @@ import numpy as np
 import keras
 from keras import backend as K
 from keras.layers.convolutional import Conv2D, MaxPooling2D
-# from keras.layers.normalization import BatchNormalization
-from keras.models import Model, load_model, save_model
+from keras.models import Model
 from keras.layers import Input, GlobalAveragePooling2D, Concatenate, Lambda
 from keras.layers.core import Dense
 import tensorflow as tf
@@ -26,10 +23,6 @@ from collections import deque
 import sys
 sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
-
-from MyEnv import MyEnv
-
-gamma = 0.99
 
 np.set_printoptions(suppress=True)
 
@@ -66,7 +59,6 @@ class MyAgent:
         self.t_net_q.compile(optimizer=adam, loss='mae')
 
     def createModel(self):
-#        x = Input(shape=(self.state_dim,), name='observation_input')
         x = Input(shape=self.state_dim, name='observation_input')
         u = Input(shape=(self.actions_dim,), name='action_input')
 
@@ -130,7 +122,6 @@ class MyAgent:
     def getAction(self, state):
         state = state.reshape((1,) + state.shape)
         action = self.q_net_a.predict_on_batch(state)
-        # action = map(mul, action, [1.4, 1.4, math.pi])
         action = action * np.array([[1.4, 1.4, math.pi]])
         return action
 
@@ -143,88 +134,3 @@ class MyAgent:
     def WeightCopy(self):
         self.t_net_q.set_weights(self.q_net_q.get_weights())
 
-
-
-
-
-
-
-# def CreateBatch(agent, replay_memory, batch_size):
-#     minibatch = random.sample(replay_memory, batch_size)
-#     state, action, reward, state2, end_flag =  map(np.array, zip(*minibatch))
-
-#     x_batch = state
-#     next_v_values = agent.t_net_v.predict_on_batch(state2)
-#     y_batch = np.zeros(batch_size)
-
-#     for i in range(batch_size):
-#         y_batch[i] = reward[i] + gamma * next_v_values[i]
-#     return [x_batch, action], y_batch
-
-
-
-# def main():
-#     n_episode = 150 # 繰り返すエピソード回数
-#     max_memory = 20000 # リプレイメモリの容量
-#     batch_size = 256 # いい感じに収束しないときはバッチサイズいろいろ変えてみて 
-
-#     max_sigma = 0.99 # 付与するノイズの最大分散値
-#     sigma = max_sigma
-
-#     reduce_sigma = max_sigma / n_episode # 1エピソードで下げる分散値
-
-#     # env = gym.make("Pendulum-v0") # 環境
-#     env = MyEnv('r')    # TODO: side
-#     agent = MyAgent(env)
-#     # リプレイメモリ
-#     replay_memory = deque()
-
-#     # ゲーム再スタート
-#     for episode in range(n_episode):
-
-#         print("episode " + str(episode))
-#         end_flag = False
-#         state = env.reset()
-
-#         sigma -= reduce_sigma
-#         if sigma < 0:
-#             sigma = 0
-
-#         while not end_flag:
-#             # 行動にノイズを付与
-#             action = agent.getAction(state) + np.random.normal(0, sigma, size=3)
-#             # action = action[:,0]
-#             # # Pendulumの行動が-2~2の範囲なので変換
-#             # action = np.clip(action, -1.0, 1.0) * 2.0
-
-#             state2, reward, end_flag, info = env.step(action)
-#             # 前処理
-#             # リプレイメモリに保存
-#             replay_memory.append([state, action, reward, state2, end_flag])
-#             # リプレイメモリが溢れたら前から削除
-#             if len(replay_memory) > max_memory:
-#                 replay_memory.popleft()
-#             # リプレイメモリが溜まったら学習
-#             if len(replay_memory) > batch_size*4:
-#                 x_batch, y_batch = CreateBatch(agent, replay_memory, batch_size)
-#                 agent.Train(x_batch, y_batch)
-
-#             state = state2
-#             # 可視化をする場合はこのコメントアウトを解除
-#             # env.render()
-
-#         # 4episodeに1回ターゲットネットワークに重みをコピー
-#         if episode != 0 and episode % 4 == 0:
-#             agent.WeightCopy()
-#             # Q-networkの重みをTarget-networkにコピー
-#             agent.t_net_q.save_weights("weight.h5")
-
-#     env.close()
-
-#     agent.WeightCopy()
-#     # Q-networkの重みをTarget-networkにコピー
-#     agent.t_net_q.save_weights("weight.h5")
-
-
-# if __name__ == '__main__':
-#     main()
